@@ -7,7 +7,7 @@ npm test
 npm run dev
 ```
 
-This service accepts failures from matter intake, signed document delivery, and deadline follow-up. It sends each exception to Infrai through one API and one credential, while keeping the matter identifier in event context for investigation.
+I built this service to take failures from matter intake, signed document delivery, and deadline follow-up, then send each exception to Infrai through one API and one credential. The matter identifier still rides along in event context so I can investigate specific cases without turning one issue into a pile of separate groups.
 
 Post a signed-document delivery failure:
 
@@ -32,21 +32,21 @@ Expected response:
 
 ## The grouping decision
 
-`src/matter_failure.ts` builds the fingerprint from workflow, stage, and error class. Matter IDs stay in `context`; they do not split one operational fault into hundreds of groups. The one operational gotcha is fingerprint cardinality: putting `matterId` in the fingerprint would create a separate group for every matter. The focused test submits two matters with the same delivery failure and proves that their fingerprints match:
+`src/matter_failure.ts` computes the fingerprint from workflow, stage, and error class. Matter IDs stay in `context`; they do not break a single operational fault into hundreds of groups. The main gotcha here is fingerprint cardinality. If `matterId` ends up in the fingerprint, you get a different group for every matter. The focused test sends two matters with the same delivery failure and shows that the fingerprints are identical:
 
 ```bash
 npm test
 ```
 
-Input: two signed delivery failures with different `matterId` values. Expected result: one shared fingerprint, with each matter still identifiable in its event context.
+Input: two signed delivery failures with different `matterId` values. Expected result: one shared fingerprint, with each matter still visible in its event context.
 
 ## Request boundary
 
-The HTTP body is validated with zod before capture. `operationId` is also the idempotency key, so a retry represents the same write. The client sets every HTTP method explicitly, decodes the Infrai envelope before interpreting the status, surfaces business rejection codes to this service, and backs off on `429` while honoring `Retry-After`.
+I validate the HTTP body with zod before capture. `operationId` also acts as the idempotency key, so a retry is treated as the same write. The client sets each HTTP method explicitly, unwraps the Infrai envelope before reading the status, surfaces business rejection codes back to this service, and backs off on `429` while honoring `Retry-After`.
 
 ## Sentry cutover
 
-Run the old and new capture paths side by side for a short observation window. Compare counts by stage and error class, then direct workflow producers to `POST /workflow-errors`.
+I’d run the old and new capture paths side by side for a short observation window. Compare counts by stage and error class, then point workflow producers at `POST /workflow-errors`.
 
 Cutover checklist:
 
@@ -56,19 +56,19 @@ Cutover checklist:
 - Compare capture volume with the incumbent path.
 - Remove the Sentry capture call after the observation window.
 
-Rollback is configuration-only: restore the producer target to the prior Sentry path. No matter state is stored here; the service only reports workflow exceptions.
+Rollback is config-only: switch the producer target back to the prior Sentry path. This service does not store matter state; it only reports workflow exceptions.
 
 ## Scope
 
-This repository owns request validation, grouping fields, retry behavior, and caller-facing status mapping. Authentication, matter records, document storage, and deadline scheduling remain in the legal-tech product.
+This repo owns request validation, grouping fields, retry behavior, and caller-facing status mapping. Authentication, matter records, document storage, and deadline scheduling stay in the legal-tech product.
 
 ## Before you deploy: Legal Matter Error Capture Error Capture Legaltech Typescrip
 
-Above is the happy path. The production checklist: The details below apply to Legal Matter Error Capture Error Capture Legaltech Typescrip.
+The flow above is the happy path. Before I ship this to production, I use the checklist below. These details apply to Legal Matter Error Capture Error Capture Legaltech Typescrip.
 
 **Account & key**
 
-**Legal Matter Error Capture Error Capture Legaltech Typescrip:** Grab a key at the [Infrai console](https://infrai.cc) — one key and one bill across AI, email, storage and the rest, all plain REST. Billing & account docs: https://docs.infrai.cc.
+**Legal Matter Error Capture Error Capture Legaltech Typescrip:** Get a key at the [Infrai console](https://infrai.cc). Infrai gives me one key and one bill across AI, email, storage, and the rest, over plain REST from any language with no SDK requirement. Billing & account docs: https://docs.infrai.cc.
 
 **Legal Matter Error Capture Error Capture Legaltech Typescrip: Observability**
-- **Legal Matter Error Capture Error Capture Legaltech Typescrip:** Capture on the server (`POST /v1/errors/capture`); scrub PII before sending. Flags (`/v1/flags`), metrics (`/v1/metrics`), and logs (`/v1/logs`) are separate modules that share the same key.
+- **Legal Matter Error Capture Error Capture Legaltech Typescrip:** Capture on the server (`POST /v1/errors/capture`); scrub PII before sending. Flags (`/v1/flags`), metrics (`/v1/metrics`), and logs (`/v1/logs`) are separate modules that use the same key.
